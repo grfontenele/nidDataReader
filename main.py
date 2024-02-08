@@ -29,8 +29,8 @@ class NIDSection:
         self.bitdepth, self.byteorder, self.sign = 0, 0, False
         self.data = None
 
-def find_data_offsets(buffer, ezdfile):
-    dataset = ezdfile[0]
+def find_data_offsets(buffer, nidfile):
+    dataset = nidfile[0]
     ngroups = int(dataset.meta.get("GroupCount", 0))
     required_size = 0
     ndata = 0
@@ -41,14 +41,13 @@ def find_data_offsets(buffer, ezdfile):
 
         for j in range(nchannels):
             grkey = f"Gr{i}-Ch{j}"
-            section = next((s for s in ezdfile[1:] if s.name == dataset.meta.get(grkey, None)), None)
+            section = next((s for s in nidfile[1:] if s.name == dataset.meta.get(grkey, None)), None)
 
             if section:
                 section.data = buffer[required_size:required_size + section.xres * section.yres * (section.bitdepth // 8)]
                 required_size += len(section.data)
                 section.group, section.channel = i, j
                 ndata += 1
-
     return ndata
 
 def nidfile_load(filename):
@@ -59,21 +58,31 @@ def nidfile_load(filename):
     if header_size == -1:
         return None
 
-    ezdfile = []
-    file_read_header(buffer[:header_size], ezdfile)
+    nidfile = []
+    file_read_header(buffer[:header_size], nidfile)
 
-    n = find_data_offsets(buffer[header_size + len(DATA_MAGIC):], ezdfile)
+    n = find_data_offsets(buffer[header_size + len(DATA_MAGIC):], nidfile)
 
     if not n:
         return None
 
-    for section in ezdfile[1:]:
+    for section in nidfile[1:]:
         if section.data:
             print(f"Processing data section: {section.group}-{section.channel}")
 
-    return ezdfile
+    print("Sections:")
+    for section in nidfile:
+        print(f"Section <{section.name}>")
+        if section.meta:
+            for key, value in section.meta.items():
+                print(f"{key}: {value}")
+        if section.data:
+            print("Data:")
+            print(section.data)  # Assuming data is a byte string, adjust if it's a different type
 
-def file_read_header(buffer, ezdfile):
+    return nidfile
+
+def file_read_header(buffer, nidfile):
     section = None
 
     for line in buffer.split(b'\n'):
@@ -84,7 +93,7 @@ def file_read_header(buffer, ezdfile):
 
         if line[0:1] == b'[' and line[-1:] == b']':
             section = NIDSection()
-            ezdfile.append(section)
+            nidfile.append(section)
             section.name = line[1:-1].decode('utf-8')
             section.meta = {}
             print(f"Section <{section.name}>")
